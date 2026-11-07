@@ -159,49 +159,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
-                init().then(() => {
-            subscribeToGlobalUpdates();
-        });
-                // --- ГЛОБАЛЬНАЯ ПОДПИСКА НА ОБНОВЛЕНИЯ ---
-        function subscribeToGlobalUpdates() {
-            // Создаем канал, который слушает ВСЕ изменения в таблице characters
-            supabaseClient
-                .channel('global-characters-changes')
-                .on(
-                    'postgres_changes', 
-                    { event: '*', schema: 'public', table: 'characters' }, 
-                    (payload) => {
-                        // Если сейчас открыто модальное окно редактирования, 
-                        // мы не хотим сбивать пользователя, который сам печатает.
-                        // Но если он просто смотрит — обновим.
-                        
-                        if (payload.eventType === 'UPDATE') {
-                            // Обновляем данные в локальном массиве
-                            const index = allCharacters.findIndex(c => c.id === payload.new.id);
-                            if (index !== -1) {
-                                Object.assign(allCharacters[index], payload.new);
-                            }
-                        } else if (payload.eventType === 'INSERT') {
-                            // Добавляем нового персонажа
-                            if (!allCharacters.find(c => c.id === payload.new.id)) {
-                                allCharacters.push(payload.new);
-                            }
-                        } else if (payload.eventType === 'DELETE') {
-                            // Удаляем персонажа
-                            allCharacters = allCharacters.filter(c => c.id !== payload.old.id);
-                        }
-
-                        // Перерисовываем карточки (если модалка не открыта для этого же персонажа)
-                        // Чтобы не сбить ввод, обновляем только если окно закрыто.
-                        const isModalOpen = document.getElementById('character-modal').classList.contains('active');
-                        
-                        if (!isModalOpen) {
-                            renderCards();
-                        }
-                    }
-                )
-                .subscribe();
-        }
         const supabaseUrl = 'https://rjverbkytjophdcrqmal.supabase.co';
         const supabaseKey = 'sb_publishable_KWhRUVydfD8WsBHisoG5aQ_lhAi9Xu4'; 
 
@@ -245,6 +202,7 @@
         let currentImgUrl = '';
         let realtimeChannel = null;
         let hasUnsavedChanges = false;
+        let globalUpdateTimeout = null; // Для дебаунса
 
         async function init() {
             const { data, error } = await supabaseClient.from('characters').select('*');
@@ -261,6 +219,59 @@
                 });
             }
             renderCards();
+            subscribeToGlobalUpdates();
+        }
+
+        // --- ГЛОБАЛЬНАЯ ПОДПИСКА НА ОБНОВЛЕНИЯ ---
+        function subscribeToGlobalUpdates() {
+            if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+            
+            realtimeChannel = supabaseClient
+                .channel('global-characters-changes')
+                .on(
+                    'postgres_changes', 
+                    { event: '*', schema: 'public', table: 'characters' }, 
+                    (payload) => {
+                        if (payload.eventType === 'UPDATE') {
+                            const index = allCharacters.findIndex(c => c.id === payload.new.id);
+                            if (index !== -1) {
+                                Object.assign(allCharacters[index], payload.new);
+                                updateCardTooltip(payload.new.id);
+                            }
+                        } else if (payload.eventType === 'INSERT') {
+                            if (!allCharacters.find(c => c.id === payload.new.id)) {
+                                allCharacters.push(payload.new);
+                            }
+                        } else if (payload.eventType === 'DELETE') {
+                            allCharacters = allCharacters.filter(c => c.id !== payload.old.id);
+                        }
+
+                        // Дебаунс: ждём 100 мс, чтобы собрать все изменения, и обновляем интерфейс
+                        if (globalUpdateTimeout) clearTimeout(globalUpdateTimeout);
+                        globalUpdateTimeout = setTimeout(() => {
+                            const isModalOpen = document.getElementById('character-modal').classList.contains('active');
+                            if (!isModalOpen) {
+                                renderCards();
+                            }
+                        }, 100);
+                    }
+                )
+                .subscribe();
+        }
+
+        function updateCardTooltip(charId) {
+            const card = document.querySelector(`.card[data-id="${charId}"]`);
+            if (!card) return;
+            const char = allCharacters.find(c => c.id === charId);
+            if (!char) return;
+            const tooltip = card.querySelector('.tooltip-content');
+            if (tooltip) {
+                const newTooltipHTML = generateTooltipHTML(char);
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = newTooltipHTML;
+                const newTooltipInner = tempDiv.firstElementChild.innerHTML;
+                tooltip.innerHTML = newTooltipInner;
+            }
         }
 
         function generateTooltipHTML(char) {
@@ -297,6 +308,7 @@
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.onclick = () => openModal(char.id);
+                card.dataset.id = char.id;
                 card.dataset.name = (char.name || '').toLowerCase(); 
                 
                 let imgHtml = '';
@@ -453,7 +465,6 @@
             document.getElementById('save-btn').style.backgroundColor = '#43b581';
 
             document.getElementById('character-modal').classList.add('active');
-            subscribeToRealtime(charId);
         }
 
         function markUnsaved() {
@@ -461,25 +472,6 @@
             document.getElementById('save-btn').disabled = false;
             document.getElementById('save-status').textContent = 'Есть несохраненные изменения';
             document.getElementById('save-status').style.color = '#f0a040';
-        }
-
-        function subscribeToRealtime(charId) {
-            if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
-            realtimeChannel = supabaseClient
-                .channel('char-changes-' + charId)
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters', filter: `id=eq.${charId}` }, (payload) => {
-                    if (currentCharId === charId && !hasUnsavedChanges) {
-                        if (document.activeElement !== document.getElementById('input-name')) {
-                            document.getElementById('input-name').value = payload.new.name || '';
-                        }
-                        paramsList.forEach(param => {
-                            const textarea = document.getElementById(`input-${param.key}`);
-                            if (textarea && document.activeElement !== textarea) {
-                                textarea.value = payload.new[param.key] || '';
-                            }
-                        });
-                    }
-                }).subscribe();
         }
 
         async function saveCharacterData() {
@@ -556,7 +548,10 @@
                     char.name = newName;
                     Object.assign(char, updateData);
                 }
-                renderCards();
+                // Глобальная подписка сама перерисует карточки с задержкой.
+                // Но чтобы не было "моргания", принудительно обновим тултип и имя сразу
+                updateCardTooltip(currentCharId);
+                renderCards(); 
 
                 setTimeout(() => { if (!hasUnsavedChanges) statusMsg.textContent = ''; }, 3000);
                 saveBtn.textContent = 'Сохранить анкету';
@@ -603,7 +598,6 @@
             document.getElementById('character-modal').classList.remove('active');
             currentCharId = null;
             hasUnsavedChanges = false;
-            if (realtimeChannel) { supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
         }
 
         function openCreateModal() {
@@ -644,58 +638,4 @@
             let imgUrl = '';
 
             const fileInput = document.getElementById('new-char-image');
-            const urlInput = document.getElementById('new-char-image-url').value.trim();
-
-            if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${id}.${fileExt}`;
-                statusMsg.textContent = 'Загрузка картинки...';
-                
-                const { error: uploadError } = await supabaseClient.storage.from('avatars').upload(fileName, file);
-                if (uploadError) {
-                    statusMsg.textContent = 'Ошибка картинки: ' + uploadError.message;
-                    statusMsg.style.color = '#f04747';
-                    createBtn.disabled = false;
-                    return;
-                }
-                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(fileName);
-                imgUrl = urlData.publicUrl;
-            } else if (urlInput) {
-                imgUrl = urlInput;
-            }
-
-            const newData = { id: id, name: name, img_url: imgUrl };
-            paramsList.forEach(param => {
-                const textarea = document.getElementById(`create-input-${param.key}`);
-                if (textarea && textarea.value.trim() !== '') newData[param.key] = textarea.value;
-            });
-
-            const { error } = await supabaseClient.from('characters').insert([newData]);
-
-            if (error) {
-                statusMsg.textContent = 'Ошибка: ' + error.message;
-                statusMsg.style.color = '#f04747';
-                createBtn.disabled = false;
-            } else {
-                allCharacters.push(newData);
-                renderCards();
-                statusMsg.textContent = 'Персонаж добавлен!';
-                statusMsg.style.color = '#43b581';
-                setTimeout(() => { closeCreateModal(); createBtn.disabled = false; }, 1000);
-            }
-        }
-
-        document.getElementById('character-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
-        document.getElementById('create-modal').addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                if (document.getElementById('character-modal').classList.contains('active')) closeModal();
-                if (document.getElementById('create-modal').classList.contains('active')) closeCreateModal();
-            }
-        });
-
-        init();
-    </script>
-</body>
-</html>
+            const url
