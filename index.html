@@ -159,6 +159,49 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
+                init().then(() => {
+            subscribeToGlobalUpdates();
+        });
+                // --- ГЛОБАЛЬНАЯ ПОДПИСКА НА ОБНОВЛЕНИЯ ---
+        function subscribeToGlobalUpdates() {
+            // Создаем канал, который слушает ВСЕ изменения в таблице characters
+            supabaseClient
+                .channel('global-characters-changes')
+                .on(
+                    'postgres_changes', 
+                    { event: '*', schema: 'public', table: 'characters' }, 
+                    (payload) => {
+                        // Если сейчас открыто модальное окно редактирования, 
+                        // мы не хотим сбивать пользователя, который сам печатает.
+                        // Но если он просто смотрит — обновим.
+                        
+                        if (payload.eventType === 'UPDATE') {
+                            // Обновляем данные в локальном массиве
+                            const index = allCharacters.findIndex(c => c.id === payload.new.id);
+                            if (index !== -1) {
+                                Object.assign(allCharacters[index], payload.new);
+                            }
+                        } else if (payload.eventType === 'INSERT') {
+                            // Добавляем нового персонажа
+                            if (!allCharacters.find(c => c.id === payload.new.id)) {
+                                allCharacters.push(payload.new);
+                            }
+                        } else if (payload.eventType === 'DELETE') {
+                            // Удаляем персонажа
+                            allCharacters = allCharacters.filter(c => c.id !== payload.old.id);
+                        }
+
+                        // Перерисовываем карточки (если модалка не открыта для этого же персонажа)
+                        // Чтобы не сбить ввод, обновляем только если окно закрыто.
+                        const isModalOpen = document.getElementById('character-modal').classList.contains('active');
+                        
+                        if (!isModalOpen) {
+                            renderCards();
+                        }
+                    }
+                )
+                .subscribe();
+        }
         const supabaseUrl = 'https://rjverbkytjophdcrqmal.supabase.co';
         const supabaseKey = 'sb_publishable_KWhRUVydfD8WsBHisoG5aQ_lhAi9Xu4'; 
 
