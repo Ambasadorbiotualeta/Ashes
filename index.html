@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Персонажи (Supabase)</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #1a1a1a; color: white; margin: 0; padding: 20px; text-align: center; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; max-width: 1200px; margin: 0 auto; }
+        .card { background-color: #2f3136; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.5); transition: transform 0.2s; display: flex; flex-direction: column; cursor: pointer; }
+        .card:hover { transform: scale(1.02); box-shadow: 0 6px 12px rgba(114, 137, 218, 0.3); }
+        .card img { width: 100%; height: 220px; object-fit: cover; background-color: #444; pointer-events: none; }
+        .card-content { padding: 12px; flex-grow: 1; display: flex; flex-direction: column; pointer-events: none; }
+        .name { font-size: 1.5em; font-weight: 900; margin-bottom: 8px; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        .placeholder { display: flex; align-items: center; justify-content: center; font-size: 3em; color: #555; background-color: #333; height: 220px; pointer-events: none; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background-color: #2f3136; border-radius: 10px; width: 100%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); animation: fadeIn 0.3s ease; text-align: left; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-header { padding: 15px 20px; border-bottom: 1px solid #40444b; display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 1.5em; font-weight: 900; color: #7289da; margin: 0; }
+        .close-btn { background: none; border: none; color: #b9bbbe; font-size: 1.5em; cursor: pointer; transition: color 0.2s; }
+        .close-btn:hover { color: #fff; }
+        .modal-body { padding: 20px; overflow-y: auto; flex-grow: 1; }
+        .param-row { display: flex; flex-direction: column; margin-bottom: 15px; border-bottom: 1px solid #40444b; padding-bottom: 15px; }
+        .param-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .param-label { font-size: 0.95em; color: #b9bbbe; margin-bottom: 6px; font-weight: bold; }
+        .param-input { width: 100%; box-sizing: border-box; background-color: #202225; border: 1px solid #40444b; color: #dcddde; border-radius: 5px; padding: 10px; font-family: inherit; font-size: 0.9em; resize: vertical; min-height: 50px; }
+        .param-input:focus { outline: none; border-color: #7289da; }
+        .reset-btn { margin-top: 10px; padding: 10px 20px; background-color: #f04747; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; width: 100%; }
+        .reset-btn:hover { background-color: #d84040; }
+        .status-msg { font-size: 0.8em; color: #43b581; margin-top: 5px; height: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="grid-container" id="character-grid"></div>
+
+    <div class="modal-overlay" id="character-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modal-title">Имя Персонажа</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div style="padding: 15px 20px; border-top: 1px solid #40444b;">
+                <button class="reset-btn" id="reset-char-btn">Очистить анкету</button>
+                <div class="status-msg" id="save-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        // --- ВСТАВЬ СЮДА СВОИ ДАННЫЕ ИЗ SUPABASE ---
+        // ВАЖНО: используй только Publishable (anon) ключ. 
+        // Secret ключ НИКОГДА не вставляй в HTML-файл!
+        const supabaseUrl = 'https://rjverbkytjophdcrqmal.supabase.co/rest/v1/'; // например: https://abcdefgh.supabase.co
+        const supabaseKey = 'sb_publishable_KWhRUVydfD8WsBHisoG5aQ_lhAi9Xu4'; 
+
+        const { createClient } = supabase;
+        const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+        const characters = [
+            { id: 'arian', name: 'Ариан', img: 'arian.png' },
+            { id: 'zarya', name: 'Заря', img: '' },
+            { id: 'luuna', name: 'Лууна', img: '' },
+            { id: 'jannet', name: 'Джаннет', img: '' },
+            { id: 'luitgard', name: 'Луитгард', img: '' },
+            { id: 'ashira', name: 'Ашира', img: '' },
+            { id: 'raik', name: 'Райк', img: 'raik.png' },
+            { id: 'sakuna', name: 'Сакуна', img: 'sakuna.png' },
+            { id: 'ametisa', name: 'Аметиса', img: 'ametisa.png' },
+            { id: 'shikhori', name: 'Шихори', img: 'shikhori.png' },
+            { id: 'filisi', name: 'Филиси', img: '' },
+            { id: 'puret', name: 'Пурет', img: 'puret.png' },
+            { id: 'kokomi', name: 'Кокоми', img: '' },
+            { id: 'kasdeya', name: 'Касдея', img: '' },
+            { id: 'alexandra', name: 'Александра', img: '' }
+        ];
+
+        const paramsList = [
+            { key: "age_status", label: "Возраст и статус" },
+            { key: "physical_traits", label: "Физические черты" },
+            { key: "special_marks", label: "Особые приметы" },
+            { key: "clothing_style", label: "Одежда" },
+            { key: "personality_type", label: "Тип личности" },
+            { key: "weaknesses", label: "Слабости и недостатки" },
+            { key: "motivation", label: "Главная мотивация" },
+            { key: "social_circle", label: "Круг общения" }
+        ];
+
+        let currentCharId = null;
+        let saveTimeout = null;
+        let realtimeChannel = null;
+
+        function renderCards() {
+            const grid = document.getElementById('character-grid');
+            grid.innerHTML = '';
+            characters.forEach(char => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.onclick = () => openModal(char.id);
+                let imgHtml = '';
+                if (char.img && char.img.trim() !== '') {
+                    imgHtml = `<img src="${char.img}" alt="${char.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+                }
+                let placeholderHtml = `<div class="placeholder" style="${char.img ? 'display:none;' : 'display:flex;'}">?</div>`;
+                const textHtml = `<div class="card-content"><div class="name">${char.name}</div></div>`;
+                card.innerHTML = imgHtml + placeholderHtml + textHtml;
+                grid.appendChild(card);
+            });
+        }
+
+        async function openModal(charId) {
+            currentCharId = charId;
+            const char = characters.find(c => c.id === charId);
+            document.getElementById('modal-title').textContent = char.name;
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = ''; 
+            document.getElementById('save-status').textContent = 'Загрузка...';
+
+            paramsList.forEach(param => {
+                const row = document.createElement('div');
+                row.className = 'param-row';
+                row.innerHTML = `
+                    <label class="param-label">${param.label}</label>
+                    <textarea class="param-input" id="input-${param.key}" placeholder="Загрузка..."></textarea>
+                `;
+                modalBody.appendChild(row);
+            });
+
+            const { data, error } = await supabaseClient
+                .from('characters')
+                .select('*')
+                .eq('id', charId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') {
+                console.error('Ошибка загрузки:', error);
+                document.getElementById('save-status').textContent = 'Ошибка загрузки';
+                return;
+            }
+
+            const charData = data || {};
+            paramsList.forEach(param => {
+                const textarea = document.getElementById(`input-${param.key}`);
+                if (textarea) {
+                    textarea.value = charData[param.key] || '';
+                    textarea.addEventListener('input', () => scheduleSave(charId, param.key, textarea.value));
+                }
+            });
+
+            document.getElementById('save-status').textContent = '';
+            document.getElementById('character-modal').classList.add('active');
+
+            if (realtimeChannel) {
+                supabaseClient.removeChannel(realtimeChannel);
+            }
+            realtimeChannel = supabaseClient
+                .channel('char-changes-' + charId)
+                .on(
+                    'postgres_changes',
+                    { event: 'UPDATE', schema: 'public', table: 'characters', filter: `id=eq.${charId}` },
+                    (payload) => {
+                        if (currentCharId === charId) {
+                            paramsList.forEach(param => {
+                                const textarea = document.getElementById(`input-${param.key}`);
+                                if (textarea && document.activeElement !== textarea) {
+                                    textarea.value = payload.new[param.key] || '';
+                                }
+                            });
+                        }
+                    }
+                )
+                .subscribe();
+        }
+
+        function scheduleSave(charId, fieldKey, value) {
+            document.getElementById('save-status').textContent = 'Сохранение...';
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {
+                const updateData = { id: charId };
+                updateData[fieldKey] = value;
+
+                const { error } = await supabaseClient
+                    .from('characters')
+                    .upsert(updateData, { onConflict: 'id' });
+
+                if (error) {
+                    console.error('Ошибка сохранения:', error);
+                    document.getElementById('save-status').textContent = 'Ошибка: ' + error.message;
+                } else {
+                    document.getElementById('save-status').textContent = 'Сохранено!';
+                    setTimeout(() => { document.getElementById('save-status').textContent = ''; }, 2000);
+                }
+            }, 500);
+        }
+
+        async function clearCharacterData(charId) {
+            if (confirm('Очистить все данные об этом персонаже? Это увидят все.')) {
+                const emptyData = { id: charId };
+                paramsList.forEach(param => { emptyData[param.key] = null; });
+
+                const { error } = await supabaseClient
+                    .from('characters')
+                    .upsert(emptyData, { onConflict: 'id' });
+
+                if (error) {
+                    alert('Ошибка очистки: ' + error.message);
+                } else {
+                    paramsList.forEach(param => {
+                        const textarea = document.getElementById(`input-${param.key}`);
+                        if (textarea) textarea.value = '';
+                    });
+                    document.getElementById('save-status').textContent = 'Анкета очищена';
+                    setTimeout(() => { document.getElementById('save-status').textContent = ''; }, 2000);
+                }
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('character-modal').classList.remove('active');
+            currentCharId = null;
+            if (realtimeChannel) {
+                supabaseClient.removeChannel(realtimeChannel);
+                realtimeChannel = null;
+            }
+        }
+
+        document.getElementById('character-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        document.getElementById('reset-char-btn').onclick = () => {
+            if (currentCharId) clearCharacterData(currentCharId);
+        };
+
+        renderCards();
+    </script>
+</body>
+</html>
