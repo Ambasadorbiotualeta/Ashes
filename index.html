@@ -221,7 +221,6 @@
             renderCards();
             subscribeToGlobalUpdates();
         }
-
         // --- ГЛОБАЛЬНАЯ ПОДПИСКА НА ОБНОВЛЕНИЯ ---
         function subscribeToGlobalUpdates() {
             if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
@@ -232,11 +231,12 @@
                     'postgres_changes', 
                     { event: '*', schema: 'public', table: 'characters' }, 
                     (payload) => {
+                        // 1. Обновляем данные в локальном массиве
                         if (payload.eventType === 'UPDATE') {
                             const index = allCharacters.findIndex(c => c.id === payload.new.id);
                             if (index !== -1) {
-                                Object.assign(allCharacters[index], payload.new);
-                                updateCardTooltip(payload.new.id);
+                                // Полностью заменяем объект, чтобы подтянулись все поля
+                                allCharacters[index] = { ...allCharacters[index], ...payload.new };
                             }
                         } else if (payload.eventType === 'INSERT') {
                             if (!allCharacters.find(c => c.id === payload.new.id)) {
@@ -246,24 +246,33 @@
                             allCharacters = allCharacters.filter(c => c.id !== payload.old.id);
                         }
 
-                        // Дебаунс: ждём 100 мс, чтобы собрать все изменения, и обновляем интерфейс
-                        if (globalUpdateTimeout) clearTimeout(globalUpdateTimeout);
-                        globalUpdateTimeout = setTimeout(() => {
-                            const isModalOpen = document.getElementById('character-modal').classList.contains('active');
-                            if (!isModalOpen) {
-                                renderCards();
+                        // 2. Если открыто модальное окно с ЭТИМ ЖЕ персонажем, 
+                        // мы не перерисовываем карточки (чтобы не сбить ввод), 
+                        // но тултип на фоне все равно обновим.
+                        const isModalOpen = document.getElementById('character-modal').classList.contains('active');
+                        
+                        if (!isModalOpen) {
+                            // Если окно закрыто — перерисовываем всю сетку
+                            renderCards();
+                        } else {
+                            // Если окно открыто, обновляем только тултип изменившегося персонажа
+                            if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                                updateCardTooltip(payload.new.id);
                             }
-                        }, 100);
+                        }
                     }
                 )
                 .subscribe();
         }
 
+        // Обновляет тултип конкретной карточки
         function updateCardTooltip(charId) {
             const card = document.querySelector(`.card[data-id="${charId}"]`);
             if (!card) return;
             const char = allCharacters.find(c => c.id === charId);
             if (!char) return;
+            
+            // Обновляем тултип
             const tooltip = card.querySelector('.tooltip-content');
             if (tooltip) {
                 const newTooltipHTML = generateTooltipHTML(char);
@@ -272,8 +281,24 @@
                 const newTooltipInner = tempDiv.firstElementChild.innerHTML;
                 tooltip.innerHTML = newTooltipInner;
             }
+            
+            // Также обновляем имя и картинку на карточке (на случай, если их изменили)
+            const nameEl = card.querySelector('.name');
+            if (nameEl) nameEl.textContent = char.name;
+            
+            const imgEl = card.querySelector('img');
+            const placeholderEl = card.querySelector('.placeholder');
+            if (char.img && char.img.trim() !== '') {
+                if (imgEl) {
+                    imgEl.src = char.img;
+                    imgEl.style.display = 'block';
+                }
+                if (placeholderEl) placeholderEl.style.display = 'none';
+            } else {
+                if (imgEl) imgEl.style.display = 'none';
+                if (placeholderEl) placeholderEl.style.display = 'flex';
+            }
         }
-
         function generateTooltipHTML(char) {
             let hasData = false;
             let html = '';
