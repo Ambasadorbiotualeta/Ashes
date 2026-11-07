@@ -6,13 +6,19 @@
     <title>Персонажи (Supabase)</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #1a1a1a; color: white; margin: 0; padding: 20px; text-align: center; }
-        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; max-width: 1200px; margin: 0 auto; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; max-width: 1200px; margin: 0 auto; margin-bottom: 30px; }
         .card { background-color: #2f3136; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.5); transition: transform 0.2s; display: flex; flex-direction: column; cursor: pointer; }
         .card:hover { transform: scale(1.02); box-shadow: 0 6px 12px rgba(114, 137, 218, 0.3); }
         .card img { width: 100%; height: 220px; object-fit: cover; background-color: #444; pointer-events: none; }
         .card-content { padding: 12px; flex-grow: 1; display: flex; flex-direction: column; pointer-events: none; }
         .name { font-size: 1.5em; font-weight: 900; margin-bottom: 8px; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
         .placeholder { display: flex; align-items: center; justify-content: center; font-size: 3em; color: #555; background-color: #333; height: 220px; pointer-events: none; }
+        
+        /* Кнопка добавления */
+        .add-btn { padding: 12px 24px; background-color: #43b581; color: white; border: none; border-radius: 8px; font-size: 1.1em; font-weight: bold; cursor: pointer; transition: background-color 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .add-btn:hover { background-color: #3ca374; }
+
+        /* Модальное окно */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
         .modal-overlay.active { display: flex; }
         .modal-content { background-color: #2f3136; border-radius: 10px; width: 100%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); animation: fadeIn 0.3s ease; text-align: left; }
@@ -22,20 +28,38 @@
         .close-btn { background: none; border: none; color: #b9bbbe; font-size: 1.5em; cursor: pointer; transition: color 0.2s; }
         .close-btn:hover { color: #fff; }
         .modal-body { padding: 20px; overflow-y: auto; flex-grow: 1; }
+        
         .param-row { display: flex; flex-direction: column; margin-bottom: 15px; border-bottom: 1px solid #40444b; padding-bottom: 15px; }
         .param-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         .param-label { font-size: 0.95em; color: #b9bbbe; margin-bottom: 6px; font-weight: bold; }
         .param-input { width: 100%; box-sizing: border-box; background-color: #202225; border: 1px solid #40444b; color: #dcddde; border-radius: 5px; padding: 10px; font-family: inherit; font-size: 0.9em; resize: vertical; min-height: 50px; }
         .param-input:focus { outline: none; border-color: #7289da; }
-        .reset-btn { margin-top: 10px; padding: 10px 20px; background-color: #f04747; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; width: 100%; }
-        .reset-btn:hover { background-color: #d84040; }
-        .status-msg { font-size: 0.8em; color: #43b581; margin-top: 5px; height: 15px; }
+        
+        /* Поля для создания */
+        .create-input { width: 100%; box-sizing: border-box; background-color: #202225; border: 1px solid #40444b; color: #dcddde; border-radius: 5px; padding: 10px; font-family: inherit; font-size: 0.95em; margin-bottom: 10px; }
+        .create-input:focus { outline: none; border-color: #7289da; }
+        .file-input { color: #b9bbbe; font-size: 0.9em; margin-bottom: 15px; display: block; }
+        
+        /* Кнопки */
+        .modal-footer { padding: 15px 20px; border-top: 1px solid #40444b; }
+        .btn-group { display: flex; gap: 10px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; font-size: 0.95em; flex: 1; }
+        .btn-save { background-color: #43b581; color: white; }
+        .btn-save:hover { background-color: #3ca374; }
+        .btn-save:disabled { background-color: #555; cursor: not-allowed; color: #888; }
+        .btn-cancel { background-color: #4f545c; color: white; }
+        .btn-cancel:hover { background-color: #686d73; }
+        
+        .status-msg { font-size: 0.8em; color: #43b581; text-align: center; height: 15px; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div class="grid-container" id="character-grid"></div>
+    
+    <button class="add-btn" onclick="openCreateModal()">+ Добавить персонажа</button>
 
+    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ ПРОСМОТРА/РЕДАКТИРОВАНИЯ -->
     <div class="modal-overlay" id="character-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -43,9 +67,38 @@
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
             <div class="modal-body" id="modal-body"></div>
-            <div style="padding: 15px 20px; border-top: 1px solid #40444b;">
-                <button class="reset-btn" id="reset-char-btn">Очистить анкету</button>
+            <div class="modal-footer">
+                <div class="btn-group">
+                    <button class="btn btn-save" id="save-btn" onclick="saveCharacterData()">Сохранить анкету</button>
+                    <button class="btn btn-cancel" onclick="closeModal()">Отменить</button>
+                </div>
                 <div class="status-msg" id="save-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ СОЗДАНИЯ НОВОГО ПЕРСОНАЖА -->
+    <div class="modal-overlay" id="create-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Новый персонаж</h2>
+                <button class="close-btn" onclick="closeCreateModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label class="param-label">Имя персонажа (обязательно)</label>
+                <input type="text" id="new-char-name" class="create-input" placeholder="Например: Ариан">
+                
+                <label class="param-label">Картинка (необязательно)</label>
+                <input type="file" id="new-char-image" class="file-input" accept="image/*">
+                
+                <div id="create-fields-container"></div>
+            </div>
+            <div class="modal-footer">
+                <div class="btn-group">
+                    <button class="btn btn-save" id="create-save-btn" onclick="createCharacter()">Добавить</button>
+                    <button class="btn btn-cancel" onclick="closeCreateModal()">Отмена</button>
+                </div>
+                <div class="status-msg" id="create-status"></div>
             </div>
         </div>
     </div>
@@ -53,16 +106,15 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
-        // --- ВСТАВЬ СЮДА СВОИ ДАННЫЕ ИЗ SUPABASE ---
-        // ВАЖНО: используй только Publishable (anon) ключ. 
-        // Secret ключ НИКОГДА не вставляй в HTML-файл!
-        const supabaseUrl = 'https://rjverbkytjophdcrqmal.supabase.co'; // например: https://abcdefgh.supabase.co
+        // --- ТВОИ ДАННЫЕ SUPABASE ---
+        const supabaseUrl = 'https://rjverbkytjophdcrqmal.supabase.co';
         const supabaseKey = 'sb_publishable_KWhRUVydfD8WsBHisoG5aQ_lhAi9Xu4'; 
 
         const { createClient } = supabase;
         const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-        const characters = [
+        // Базовый список (карточки, у которых нет картинки в базе, но они есть в коде)
+        const baseCharacters = [
             { id: 'arian', name: 'Ариан', img: 'arian.png' },
             { id: 'zarya', name: 'Заря', img: '' },
             { id: 'luuna', name: 'Лууна', img: '' },
@@ -80,6 +132,8 @@
             { id: 'alexandra', name: 'Александра', img: '' }
         ];
 
+        let allCharacters = [...baseCharacters]; // Массив, который будем отображать
+
         const paramsList = [
             { key: "age_status", label: "Возраст и статус" },
             { key: "physical_traits", label: "Физические черты" },
@@ -92,13 +146,43 @@
         ];
 
         let currentCharId = null;
-        let saveTimeout = null;
         let realtimeChannel = null;
+        let hasUnsavedChanges = false;
+
+        // --- ИНИЦИАЛИЗАЦИЯ: ЗАГРУЗКА КАСТОМНЫХ ПЕРСОНАЖЕЙ ИЗ БАЗЫ ---
+        async function init() {
+            // Загружаем персонажей, которых нет в базовом списке (добавленных пользователями)
+            const { data, error } = await supabaseClient
+                .from('characters')
+                .select('id, name, img_url');
+
+            if (!error && data) {
+                // Обновляем картинки для базовых персонажей, если они есть в базе
+                data.forEach(dbChar => {
+                    const existing = allCharacters.find(c => c.id === dbChar.id);
+                    if (existing && dbChar.img_url) {
+                        existing.img = dbChar.img_url; // Подменяем локальную картинку на ту, что в базе
+                    }
+                });
+
+                // Добавляем новых персонажей, которых нет в базовом списке
+                data.forEach(dbChar => {
+                    if (!allCharacters.find(c => c.id === dbChar.id) && dbChar.name) {
+                        allCharacters.push({
+                            id: dbChar.id,
+                            name: dbChar.name,
+                            img: dbChar.img_url || ''
+                        });
+                    }
+                });
+            }
+            renderCards();
+        }
 
         function renderCards() {
             const grid = document.getElementById('character-grid');
             grid.innerHTML = '';
-            characters.forEach(char => {
+            allCharacters.forEach(char => {
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.onclick = () => openModal(char.id);
@@ -113,13 +197,16 @@
             });
         }
 
+        // --- ПРОСМОТР / РЕДАКТИРОВАНИЕ ---
         async function openModal(charId) {
             currentCharId = charId;
-            const char = characters.find(c => c.id === charId);
+            hasUnsavedChanges = false;
+            const char = allCharacters.find(c => c.id === charId);
             document.getElementById('modal-title').textContent = char.name;
             const modalBody = document.getElementById('modal-body');
             modalBody.innerHTML = ''; 
             document.getElementById('save-status').textContent = 'Загрузка...';
+            document.getElementById('save-btn').disabled = true;
 
             paramsList.forEach(param => {
                 const row = document.createElement('div');
@@ -148,99 +235,198 @@
                 const textarea = document.getElementById(`input-${param.key}`);
                 if (textarea) {
                     textarea.value = charData[param.key] || '';
-                    textarea.addEventListener('input', () => scheduleSave(charId, param.key, textarea.value));
+                    textarea.addEventListener('input', () => {
+                        hasUnsavedChanges = true;
+                        document.getElementById('save-btn').disabled = false;
+                        document.getElementById('save-status').textContent = 'Есть несохраненные изменения';
+                        document.getElementById('save-status').style.color = '#f0a040';
+                    });
                 }
             });
 
             document.getElementById('save-status').textContent = '';
-            document.getElementById('character-modal').classList.add('active');
+            document.getElementById('save-btn').disabled = false;
+            document.getElementById('save-btn').style.backgroundColor = '#43b581';
 
-            if (realtimeChannel) {
-                supabaseClient.removeChannel(realtimeChannel);
-            }
+            document.getElementById('character-modal').classList.add('active');
+            subscribeToRealtime(charId);
+        }
+
+        function subscribeToRealtime(charId) {
+            if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
             realtimeChannel = supabaseClient
                 .channel('char-changes-' + charId)
-                .on(
-                    'postgres_changes',
-                    { event: 'UPDATE', schema: 'public', table: 'characters', filter: `id=eq.${charId}` },
-                    (payload) => {
-                        if (currentCharId === charId) {
-                            paramsList.forEach(param => {
-                                const textarea = document.getElementById(`input-${param.key}`);
-                                if (textarea && document.activeElement !== textarea) {
-                                    textarea.value = payload.new[param.key] || '';
-                                }
-                            });
-                        }
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters', filter: `id=eq.${charId}` }, (payload) => {
+                    if (currentCharId === charId && !hasUnsavedChanges) {
+                        paramsList.forEach(param => {
+                            const textarea = document.getElementById(`input-${param.key}`);
+                            if (textarea && document.activeElement !== textarea) {
+                                textarea.value = payload.new[param.key] || '';
+                            }
+                        });
                     }
-                )
-                .subscribe();
+                }).subscribe();
         }
 
-        function scheduleSave(charId, fieldKey, value) {
-            document.getElementById('save-status').textContent = 'Сохранение...';
-            if (saveTimeout) clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(async () => {
-                const updateData = { id: charId };
-                updateData[fieldKey] = value;
+        async function saveCharacterData() {
+            if (!currentCharId) return;
+            const saveBtn = document.getElementById('save-btn');
+            const statusMsg = document.getElementById('save-status');
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Сохранение...';
+            statusMsg.textContent = 'Отправка данных в базу...';
+            statusMsg.style.color = '#b9bbbe';
 
-                const { error } = await supabaseClient
-                    .from('characters')
-                    .upsert(updateData, { onConflict: 'id' });
+            const updateData = { id: currentCharId };
+            paramsList.forEach(param => {
+                const textarea = document.getElementById(`input-${param.key}`);
+                if (textarea) updateData[param.key] = textarea.value;
+            });
 
-                if (error) {
-                    console.error('Ошибка сохранения:', error);
-                    document.getElementById('save-status').textContent = 'Ошибка: ' + error.message;
-                } else {
-                    document.getElementById('save-status').textContent = 'Сохранено!';
-                    setTimeout(() => { document.getElementById('save-status').textContent = ''; }, 2000);
-                }
-            }, 500);
-        }
+            const { error } = await supabaseClient.from('characters').upsert(updateData, { onConflict: 'id' });
 
-        async function clearCharacterData(charId) {
-            if (confirm('Очистить все данные об этом персонаже? Это увидят все.')) {
-                const emptyData = { id: charId };
-                paramsList.forEach(param => { emptyData[param.key] = null; });
-
-                const { error } = await supabaseClient
-                    .from('characters')
-                    .upsert(emptyData, { onConflict: 'id' });
-
-                if (error) {
-                    alert('Ошибка очистки: ' + error.message);
-                } else {
-                    paramsList.forEach(param => {
-                        const textarea = document.getElementById(`input-${param.key}`);
-                        if (textarea) textarea.value = '';
-                    });
-                    document.getElementById('save-status').textContent = 'Анкета очищена';
-                    setTimeout(() => { document.getElementById('save-status').textContent = ''; }, 2000);
-                }
+            if (error) {
+                statusMsg.textContent = 'Ошибка: ' + error.message;
+                statusMsg.style.color = '#f04747';
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Сохранить анкету';
+            } else {
+                statusMsg.textContent = 'Анкета успешно сохранена!';
+                statusMsg.style.color = '#43b581';
+                hasUnsavedChanges = false;
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Сохранить анкету';
+                setTimeout(() => { if (!hasUnsavedChanges) statusMsg.textContent = ''; }, 3000);
             }
         }
 
         function closeModal() {
+            if (hasUnsavedChanges) {
+                if (!confirm('У тебя есть несохраненные изменения. Точно закрыть без сохранения?')) return;
+            }
             document.getElementById('character-modal').classList.remove('active');
             currentCharId = null;
-            if (realtimeChannel) {
-                supabaseClient.removeChannel(realtimeChannel);
-                realtimeChannel = null;
+            hasUnsavedChanges = false;
+            if (realtimeChannel) { supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+        }
+
+        // --- СОЗДАНИЕ НОВОГО ПЕРСОНАЖА ---
+        function openCreateModal() {
+            document.getElementById('new-char-name').value = '';
+            document.getElementById('new-char-image').value = '';
+            document.getElementById('create-status').textContent = '';
+            
+            // Заполняем форму пустыми полями
+            const container = document.getElementById('create-fields-container');
+            container.innerHTML = '';
+            paramsList.forEach(param => {
+                const row = document.createElement('div');
+                row.className = 'param-row';
+                row.innerHTML = `
+                    <label class="param-label">${param.label}</label>
+                    <textarea class="param-input" id="create-input-${param.key}"></textarea>
+                `;
+                container.appendChild(row);
+            });
+
+            document.getElementById('create-modal').classList.add('active');
+        }
+
+        function closeCreateModal() {
+            document.getElementById('create-modal').classList.remove('active');
+        }
+
+        async function createCharacter() {
+            const name = document.getElementById('new-char-name').value.trim();
+            if (!name) {
+                document.getElementById('create-status').textContent = 'Ошибка: введите имя!';
+                document.getElementById('create-status').style.color = '#f04747';
+                return;
+            }
+
+            const createBtn = document.getElementById('create-save-btn');
+            const statusMsg = document.getElementById('create-status');
+            createBtn.disabled = true;
+            statusMsg.textContent = 'Создание...';
+            statusMsg.style.color = '#b9bbbe';
+
+            // Генерируем ID на основе имени (транслит + время, чтобы избежать совпадений)
+            const id = name.toLowerCase().replace(/[^a-zа-я0-9]/g, '') + '_' + Date.now();
+            let imgUrl = '';
+
+            // Если прикрепили картинку — загружаем её в Storage
+            const fileInput = document.getElementById('new-char-image');
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${id}.${fileExt}`;
+
+                statusMsg.textContent = 'Загрузка картинки...';
+                
+                const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                    .from('avatars')
+                    .upload(fileName, file);
+
+                if (uploadError) {
+                    statusMsg.textContent = 'Ошибка загрузки картинки: ' + uploadError.message;
+                    statusMsg.style.color = '#f04747';
+                    createBtn.disabled = false;
+                    return;
+                }
+
+                // Получаем публичную ссылку на картинку
+                const { data: urlData } = supabaseClient.storage
+                    .from('avatars')
+                    .getPublicUrl(fileName);
+                imgUrl = urlData.publicUrl;
+            }
+
+            // Собираем данные анкеты
+            const newData = { 
+                id: id, 
+                name: name, 
+                img_url: imgUrl 
+            };
+            
+            paramsList.forEach(param => {
+                const textarea = document.getElementById(`create-input-${param.key}`);
+                if (textarea && textarea.value.trim() !== '') {
+                    newData[param.key] = textarea.value;
+                }
+            });
+
+            // Сохраняем в базу
+            const { error } = await supabaseClient.from('characters').insert([newData]);
+
+            if (error) {
+                statusMsg.textContent = 'Ошибка: ' + error.message;
+                statusMsg.style.color = '#f04747';
+                createBtn.disabled = false;
+            } else {
+                // Добавляем в локальный массив и перерисовываем
+                allCharacters.push({ id: id, name: name, img: imgUrl });
+                renderCards();
+                statusMsg.textContent = 'Персонаж добавлен!';
+                statusMsg.style.color = '#43b581';
+                setTimeout(() => { closeCreateModal(); createBtn.disabled = false; }, 1000);
             }
         }
 
-        document.getElementById('character-modal').addEventListener('click', function(e) {
-            if (e.target === this) closeModal();
-        });
+        // Закрытие по клику вне окна
+        document.getElementById('character-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+        document.getElementById('create-modal').addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
+        
+        // Закрытие по Escape
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                if (document.getElementById('character-modal').classList.contains('active')) closeModal();
+                if (document.getElementById('create-modal').classList.contains('active')) closeCreateModal();
+            }
         });
 
-        document.getElementById('reset-char-btn').onclick = () => {
-            if (currentCharId) clearCharacterData(currentCharId);
-        };
-
-        renderCards();
+        // Запуск
+        init();
     </script>
 </body>
 </html>
