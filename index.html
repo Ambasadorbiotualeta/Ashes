@@ -638,4 +638,58 @@
             let imgUrl = '';
 
             const fileInput = document.getElementById('new-char-image');
-            const url
+            const urlInput = document.getElementById('new-char-image-url').value.trim();
+
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${id}.${fileExt}`;
+                statusMsg.textContent = 'Загрузка картинки...';
+                
+                const { error: uploadError } = await supabaseClient.storage.from('avatars').upload(fileName, file);
+                if (uploadError) {
+                    statusMsg.textContent = 'Ошибка картинки: ' + uploadError.message;
+                    statusMsg.style.color = '#f04747';
+                    createBtn.disabled = false;
+                    return;
+                }
+                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(fileName);
+                imgUrl = urlData.publicUrl;
+            } else if (urlInput) {
+                imgUrl = urlInput;
+            }
+
+            const newData = { id: id, name: name, img_url: imgUrl };
+            paramsList.forEach(param => {
+                const textarea = document.getElementById(`create-input-${param.key}`);
+                if (textarea && textarea.value.trim() !== '') newData[param.key] = textarea.value;
+            });
+
+            const { error } = await supabaseClient.from('characters').insert([newData]);
+
+            if (error) {
+                statusMsg.textContent = 'Ошибка: ' + error.message;
+                statusMsg.style.color = '#f04747';
+                createBtn.disabled = false;
+            } else {
+                allCharacters.push(newData);
+                renderCards();
+                statusMsg.textContent = 'Персонаж добавлен!';
+                statusMsg.style.color = '#43b581';
+                setTimeout(() => { closeCreateModal(); createBtn.disabled = false; }, 1000);
+            }
+        }
+
+        document.getElementById('character-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+        document.getElementById('create-modal').addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('character-modal').classList.contains('active')) closeModal();
+                if (document.getElementById('create-modal').classList.contains('active')) closeCreateModal();
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>
