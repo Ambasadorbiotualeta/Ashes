@@ -14,11 +14,9 @@
         .name { font-size: 1.5em; font-weight: 900; margin-bottom: 8px; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
         .placeholder { display: flex; align-items: center; justify-content: center; font-size: 3em; color: #555; background-color: #333; height: 220px; pointer-events: none; }
         
-        /* Кнопка добавления */
         .add-btn { padding: 12px 24px; background-color: #43b581; color: white; border: none; border-radius: 8px; font-size: 1.1em; font-weight: bold; cursor: pointer; transition: background-color 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         .add-btn:hover { background-color: #3ca374; }
 
-        /* Модальное окно */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
         .modal-overlay.active { display: flex; }
         .modal-content { background-color: #2f3136; border-radius: 10px; width: 100%; max-width: 700px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); animation: fadeIn 0.3s ease; text-align: left; }
@@ -35,12 +33,14 @@
         .param-input { width: 100%; box-sizing: border-box; background-color: #202225; border: 1px solid #40444b; color: #dcddde; border-radius: 5px; padding: 10px; font-family: inherit; font-size: 0.9em; resize: vertical; min-height: 50px; }
         .param-input:focus { outline: none; border-color: #7289da; }
         
-        /* Поля для создания */
+        /* Блок с картинкой в анкете */
+        .image-edit-block { background-color: #36393f; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #40444b; }
+        .current-img-preview { max-width: 100px; max-height: 100px; border-radius: 5px; object-fit: cover; margin-bottom: 10px; border: 2px solid #7289da; display: block; }
+        .file-input { color: #b9bbbe; font-size: 0.9em; margin-top: 5px; display: block; }
+        
         .create-input { width: 100%; box-sizing: border-box; background-color: #202225; border: 1px solid #40444b; color: #dcddde; border-radius: 5px; padding: 10px; font-family: inherit; font-size: 0.95em; margin-bottom: 10px; }
         .create-input:focus { outline: none; border-color: #7289da; }
-        .file-input { color: #b9bbbe; font-size: 0.9em; margin-bottom: 15px; display: block; }
         
-        /* Кнопки */
         .modal-footer { padding: 15px 20px; border-top: 1px solid #40444b; }
         .btn-group { display: flex; gap: 10px; }
         .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; font-size: 0.95em; flex: 1; }
@@ -49,7 +49,6 @@
         .btn-save:disabled { background-color: #555; cursor: not-allowed; color: #888; }
         .btn-cancel { background-color: #4f545c; color: white; }
         .btn-cancel:hover { background-color: #686d73; }
-        
         .status-msg { font-size: 0.8em; color: #43b581; text-align: center; height: 15px; margin-top: 10px; }
     </style>
 </head>
@@ -59,14 +58,16 @@
     
     <button class="add-btn" onclick="openCreateModal()">+ Добавить персонажа</button>
 
-    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ ПРОСМОТРА/РЕДАКТИРОВАНИЯ -->
+    <!-- МОДАЛЬНОЕ ОКНО ПРОСМОТРА/РЕДАКТИРОВАНИЯ -->
     <div class="modal-overlay" id="character-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title" id="modal-title">Имя Персонажа</h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
-            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-body" id="modal-body">
+                <!-- Сюда вставляется блок с картинкой и поля -->
+            </div>
             <div class="modal-footer">
                 <div class="btn-group">
                     <button class="btn btn-save" id="save-btn" onclick="saveCharacterData()">Сохранить анкету</button>
@@ -77,7 +78,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ СОЗДАНИЯ НОВОГО ПЕРСОНАЖА -->
+    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ СОЗДАНИЯ -->
     <div class="modal-overlay" id="create-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -106,14 +107,12 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
-        // --- ТВОИ ДАННЫЕ SUPABASE ---
         const supabaseUrl = 'https://rjverbkytjophdcrqmal.supabase.co';
         const supabaseKey = 'sb_publishable_KWhRUVydfD8WsBHisoG5aQ_lhAi9Xu4'; 
 
         const { createClient } = supabase;
         const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-        // Базовый список (карточки, у которых нет картинки в базе, но они есть в коде)
         const baseCharacters = [
             { id: 'arian', name: 'Ариан', img: 'arian.png' },
             { id: 'zarya', name: 'Заря', img: '' },
@@ -132,7 +131,7 @@
             { id: 'alexandra', name: 'Александра', img: '' }
         ];
 
-        let allCharacters = [...baseCharacters]; // Массив, который будем отображать
+        let allCharacters = [...baseCharacters];
 
         const paramsList = [
             { key: "age_status", label: "Возраст и статус" },
@@ -146,33 +145,20 @@
         ];
 
         let currentCharId = null;
+        let currentImgUrl = ''; // Храним текущую ссылку на картинку при редактировании
         let realtimeChannel = null;
         let hasUnsavedChanges = false;
 
-        // --- ИНИЦИАЛИЗАЦИЯ: ЗАГРУЗКА КАСТОМНЫХ ПЕРСОНАЖЕЙ ИЗ БАЗЫ ---
         async function init() {
-            // Загружаем персонажей, которых нет в базовом списке (добавленных пользователями)
-            const { data, error } = await supabaseClient
-                .from('characters')
-                .select('id, name, img_url');
-
+            const { data, error } = await supabaseClient.from('characters').select('id, name, img_url');
             if (!error && data) {
-                // Обновляем картинки для базовых персонажей, если они есть в базе
                 data.forEach(dbChar => {
                     const existing = allCharacters.find(c => c.id === dbChar.id);
-                    if (existing && dbChar.img_url) {
-                        existing.img = dbChar.img_url; // Подменяем локальную картинку на ту, что в базе
-                    }
-                });
-
-                // Добавляем новых персонажей, которых нет в базовом списке
-                data.forEach(dbChar => {
-                    if (!allCharacters.find(c => c.id === dbChar.id) && dbChar.name) {
-                        allCharacters.push({
-                            id: dbChar.id,
-                            name: dbChar.name,
-                            img: dbChar.img_url || ''
-                        });
+                    if (existing) {
+                        if (dbChar.img_url) existing.img = dbChar.img_url; 
+                        if (dbChar.name && dbChar.id.includes('_')) existing.name = dbChar.name;
+                    } else if (dbChar.name) {
+                        allCharacters.push({ id: dbChar.id, name: dbChar.name, img: dbChar.img_url || '' });
                     }
                 });
             }
@@ -197,17 +183,50 @@
             });
         }
 
-        // --- ПРОСМОТР / РЕДАКТИРОВАНИЕ ---
+        // --- РЕДАКТИРОВАНИЕ ---
         async function openModal(charId) {
             currentCharId = charId;
             hasUnsavedChanges = false;
             const char = allCharacters.find(c => c.id === charId);
+            currentImgUrl = char.img || ''; // Запоминаем текущую картинку
+            
             document.getElementById('modal-title').textContent = char.name;
             const modalBody = document.getElementById('modal-body');
             modalBody.innerHTML = ''; 
             document.getElementById('save-status').textContent = 'Загрузка...';
             document.getElementById('save-btn').disabled = true;
 
+            // 1. Блок с изменением картинки
+            const imageBlock = document.createElement('div');
+            imageBlock.className = 'image-edit-block';
+            
+            let previewHtml = '';
+            if (currentImgUrl) {
+                previewHtml = `<img src="${currentImgUrl}" class="current-img-preview" id="modal-img-preview">`;
+            } else {
+                previewHtml = `<div id="modal-img-preview" style="width:100px; height:100px; background:#222; border-radius:5px; display:flex; align-items:center; justify-content:center; color:#555; margin-bottom:10px; font-size:2em;">?</div>`;
+            }
+
+            imageBlock.innerHTML = `
+                <label class="param-label">Картинка персонажа</label>
+                ${previewHtml}
+                <input type="file" id="edit-char-image" class="file-input" accept="image/*">
+                <span style="font-size:0.75em; color:#888;">(Выберите новый файл, чтобы заменить)</span>
+            `;
+            modalBody.appendChild(imageBlock);
+
+            // Слушатель для предпросмотра картинки при выборе файла
+            document.getElementById('edit-char-image').addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        document.getElementById('modal-img-preview').outerHTML = `<img src="${e.target.result}" class="current-img-preview" id="modal-img-preview">`;
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+
+            // 2. Текстовые поля
             paramsList.forEach(param => {
                 const row = document.createElement('div');
                 row.className = 'param-row';
@@ -218,14 +237,9 @@
                 modalBody.appendChild(row);
             });
 
-            const { data, error } = await supabaseClient
-                .from('characters')
-                .select('*')
-                .eq('id', charId)
-                .single();
-
+            // 3. Загрузка данных из БД
+            const { data, error } = await supabaseClient.from('characters').select('*').eq('id', charId).single();
             if (error && error.code !== 'PGRST116') {
-                console.error('Ошибка загрузки:', error);
                 document.getElementById('save-status').textContent = 'Ошибка загрузки';
                 return;
             }
@@ -242,6 +256,14 @@
                         document.getElementById('save-status').style.color = '#f0a040';
                     });
                 }
+            });
+
+            // Слушатель изменения картинки тоже считается изменением
+            document.getElementById('edit-char-image').addEventListener('change', () => {
+                hasUnsavedChanges = true;
+                document.getElementById('save-btn').disabled = false;
+                document.getElementById('save-status').textContent = 'Есть несохраненные изменения';
+                document.getElementById('save-status').style.color = '#f0a040';
             });
 
             document.getElementById('save-status').textContent = '';
@@ -268,6 +290,7 @@
                 }).subscribe();
         }
 
+        // --- СОХРАНЕНИЕ ---
         async function saveCharacterData() {
             if (!currentCharId) return;
             const saveBtn = document.getElementById('save-btn');
@@ -275,15 +298,41 @@
             
             saveBtn.disabled = true;
             saveBtn.textContent = 'Сохранение...';
-            statusMsg.textContent = 'Отправка данных в базу...';
+            statusMsg.textContent = 'Отправка данных...';
             statusMsg.style.color = '#b9bbbe';
 
-            const updateData = { id: currentCharId };
+            let finalImgUrl = currentImgUrl;
+
+            // 1. Если выбрана новая картинка — загружаем её
+            const fileInput = document.getElementById('edit-char-image');
+            if (fileInput && fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const fileExt = file.name.split('.').pop();
+                const fileName = `edit_${currentCharId}_${Date.now()}.${fileExt}`;
+
+                statusMsg.textContent = 'Загрузка картинки...';
+                const { error: uploadError } = await supabaseClient.storage.from('avatars').upload(fileName, file);
+
+                if (uploadError) {
+                    statusMsg.textContent = 'Ошибка картинки: ' + uploadError.message;
+                    statusMsg.style.color = '#f04747';
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Сохранить анкету';
+                    return;
+                }
+
+                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(fileName);
+                finalImgUrl = urlData.publicUrl;
+            }
+
+            // 2. Собираем текст
+            const updateData = { id: currentCharId, img_url: finalImgUrl };
             paramsList.forEach(param => {
                 const textarea = document.getElementById(`input-${param.key}`);
                 if (textarea) updateData[param.key] = textarea.value;
             });
 
+            // 3. Отправляем в БД
             const { error } = await supabaseClient.from('characters').upsert(updateData, { onConflict: 'id' });
 
             if (error) {
@@ -292,18 +341,24 @@
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Сохранить анкету';
             } else {
-                statusMsg.textContent = 'Анкета успешно сохранена!';
+                statusMsg.textContent = 'Анкета сохранена!';
                 statusMsg.style.color = '#43b581';
                 hasUnsavedChanges = false;
                 saveBtn.disabled = true;
-                saveBtn.textContent = 'Сохранить анкету';
+                
+                // Обновляем картинку в локальном массиве и на главной странице
+                const char = allCharacters.find(c => c.id === currentCharId);
+                if (char) char.img = finalImgUrl;
+                renderCards();
+
                 setTimeout(() => { if (!hasUnsavedChanges) statusMsg.textContent = ''; }, 3000);
+                saveBtn.textContent = 'Сохранить анкету';
             }
         }
 
         function closeModal() {
             if (hasUnsavedChanges) {
-                if (!confirm('У тебя есть несохраненные изменения. Точно закрыть без сохранения?')) return;
+                if (!confirm('У тебя есть несохраненные изменения. Точно закрыть?')) return;
             }
             document.getElementById('character-modal').classList.remove('active');
             currentCharId = null;
@@ -311,25 +366,19 @@
             if (realtimeChannel) { supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
         }
 
-        // --- СОЗДАНИЕ НОВОГО ПЕРСОНАЖА ---
+        // --- СОЗДАНИЕ ---
         function openCreateModal() {
             document.getElementById('new-char-name').value = '';
             document.getElementById('new-char-image').value = '';
             document.getElementById('create-status').textContent = '';
-            
-            // Заполняем форму пустыми полями
             const container = document.getElementById('create-fields-container');
             container.innerHTML = '';
             paramsList.forEach(param => {
                 const row = document.createElement('div');
                 row.className = 'param-row';
-                row.innerHTML = `
-                    <label class="param-label">${param.label}</label>
-                    <textarea class="param-input" id="create-input-${param.key}"></textarea>
-                `;
+                row.innerHTML = `<label class="param-label">${param.label}</label><textarea class="param-input" id="create-input-${param.key}"></textarea>`;
                 container.appendChild(row);
             });
-
             document.getElementById('create-modal').classList.add('active');
         }
 
@@ -351,52 +400,33 @@
             statusMsg.textContent = 'Создание...';
             statusMsg.style.color = '#b9bbbe';
 
-            // Генерируем ID на основе имени (транслит + время, чтобы избежать совпадений)
             const id = name.toLowerCase().replace(/[^a-zа-я0-9]/g, '') + '_' + Date.now();
             let imgUrl = '';
 
-            // Если прикрепили картинку — загружаем её в Storage
             const fileInput = document.getElementById('new-char-image');
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${id}.${fileExt}`;
-
                 statusMsg.textContent = 'Загрузка картинки...';
                 
-                const { data: uploadData, error: uploadError } = await supabaseClient.storage
-                    .from('avatars')
-                    .upload(fileName, file);
-
+                const { error: uploadError } = await supabaseClient.storage.from('avatars').upload(fileName, file);
                 if (uploadError) {
-                    statusMsg.textContent = 'Ошибка загрузки картинки: ' + uploadError.message;
+                    statusMsg.textContent = 'Ошибка картинки: ' + uploadError.message;
                     statusMsg.style.color = '#f04747';
                     createBtn.disabled = false;
                     return;
                 }
-
-                // Получаем публичную ссылку на картинку
-                const { data: urlData } = supabaseClient.storage
-                    .from('avatars')
-                    .getPublicUrl(fileName);
+                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(fileName);
                 imgUrl = urlData.publicUrl;
             }
 
-            // Собираем данные анкеты
-            const newData = { 
-                id: id, 
-                name: name, 
-                img_url: imgUrl 
-            };
-            
+            const newData = { id: id, name: name, img_url: imgUrl };
             paramsList.forEach(param => {
                 const textarea = document.getElementById(`create-input-${param.key}`);
-                if (textarea && textarea.value.trim() !== '') {
-                    newData[param.key] = textarea.value;
-                }
+                if (textarea && textarea.value.trim() !== '') newData[param.key] = textarea.value;
             });
 
-            // Сохраняем в базу
             const { error } = await supabaseClient.from('characters').insert([newData]);
 
             if (error) {
@@ -404,7 +434,6 @@
                 statusMsg.style.color = '#f04747';
                 createBtn.disabled = false;
             } else {
-                // Добавляем в локальный массив и перерисовываем
                 allCharacters.push({ id: id, name: name, img: imgUrl });
                 renderCards();
                 statusMsg.textContent = 'Персонаж добавлен!';
@@ -413,11 +442,8 @@
             }
         }
 
-        // Закрытие по клику вне окна
         document.getElementById('character-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
         document.getElementById('create-modal').addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
-        
-        // Закрытие по Escape
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 if (document.getElementById('character-modal').classList.contains('active')) closeModal();
@@ -425,7 +451,6 @@
             }
         });
 
-        // Запуск
         init();
     </script>
 </body>
