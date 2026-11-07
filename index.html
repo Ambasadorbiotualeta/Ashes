@@ -40,7 +40,7 @@
         .create-input { width: 100%; box-sizing: border-box; background-color: #202225; border: 1px solid #40444b; color: #dcddde; border-radius: 5px; padding: 10px; font-family: inherit; font-size: 0.95em; margin-bottom: 10px; }
         .create-input:focus { outline: none; border-color: #7289da; }
         
-        .modal-footer { padding: 15px 20px; border-top: 1px solid #40444b; }
+        .modal-footer { padding: 15px 20px; border-top: 1px solid #40444b; display: flex; flex-direction: column; gap: 10px; }
         .btn-group { display: flex; gap: 10px; }
         .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; font-size: 0.95em; flex: 1; }
         .btn-save { background-color: #43b581; color: white; }
@@ -48,7 +48,11 @@
         .btn-save:disabled { background-color: #555; cursor: not-allowed; color: #888; }
         .btn-cancel { background-color: #4f545c; color: white; }
         .btn-cancel:hover { background-color: #686d73; }
-        .status-msg { font-size: 0.8em; color: #43b581; text-align: center; height: 15px; margin-top: 10px; }
+        
+        .btn-delete-trigger { background-color: transparent; color: #f04747; border: 1px solid #f04747; padding: 8px; font-size: 0.85em; opacity: 0.7; transition: all 0.2s; margin-top: 5px; }
+        .btn-delete-trigger:hover { opacity: 1; background-color: rgba(240, 71, 71, 0.1); }
+        
+        .status-msg { font-size: 0.8em; color: #43b581; text-align: center; height: 15px; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -64,14 +68,13 @@
                 <h2 class="modal-title" id="modal-title">Имя Персонажа</h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
-            <div class="modal-body" id="modal-body">
-                <!-- Сюда вставляется блок с именем, картинкой и поля -->
-            </div>
+            <div class="modal-body" id="modal-body"></div>
             <div class="modal-footer">
                 <div class="btn-group">
                     <button class="btn btn-save" id="save-btn" onclick="saveCharacterData()">Сохранить анкету</button>
                     <button class="btn btn-cancel" onclick="closeModal()">Отменить</button>
                 </div>
+                <button class="btn btn-delete-trigger" id="delete-btn" onclick="deleteCharacter()">Удалить персонажа...</button>
                 <div class="status-msg" id="save-status"></div>
             </div>
         </div>
@@ -111,6 +114,9 @@
 
         const { createClient } = supabase;
         const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+        // ПАРОЛЬ ДЛЯ УДАЛЕНИЯ
+        const DELETE_PASSWORD = 'jupers';
 
         const baseCharacters = [
             { id: 'arian', name: 'Ариан', img: 'arian.png' },
@@ -155,7 +161,7 @@
                     const existing = allCharacters.find(c => c.id === dbChar.id);
                     if (existing) {
                         if (dbChar.img_url) existing.img = dbChar.img_url; 
-                        if (dbChar.name) existing.name = dbChar.name; // Подтягиваем переименованных
+                        if (dbChar.name) existing.name = dbChar.name;
                     } else if (dbChar.name) {
                         allCharacters.push({ id: dbChar.id, name: dbChar.name, img: dbChar.img_url || '' });
                     }
@@ -182,7 +188,6 @@
             });
         }
 
-        // --- РЕДАКТИРОВАНИЕ ---
         async function openModal(charId) {
             currentCharId = charId;
             hasUnsavedChanges = false;
@@ -194,8 +199,9 @@
             modalBody.innerHTML = ''; 
             document.getElementById('save-status').textContent = 'Загрузка...';
             document.getElementById('save-btn').disabled = true;
+            document.getElementById('delete-btn').style.display = 'block';
+            document.getElementById('delete-btn').disabled = false;
 
-            // 1. Поле Имени
             const nameRow = document.createElement('div');
             nameRow.className = 'param-row';
             nameRow.innerHTML = `
@@ -204,7 +210,6 @@
             `;
             modalBody.appendChild(nameRow);
 
-            // 2. Блок с изменением картинки
             const imageBlock = document.createElement('div');
             imageBlock.className = 'image-edit-block';
             
@@ -223,7 +228,6 @@
             `;
             modalBody.appendChild(imageBlock);
 
-            // Слушатель для предпросмотра картинки
             document.getElementById('edit-char-image').addEventListener('change', function(e) {
                 if (e.target.files && e.target.files[0]) {
                     const reader = new FileReader();
@@ -235,7 +239,6 @@
                 }
             });
 
-            // 3. Текстовые поля
             paramsList.forEach(param => {
                 const row = document.createElement('div');
                 row.className = 'param-row';
@@ -246,7 +249,6 @@
                 modalBody.appendChild(row);
             });
 
-            // 4. Загрузка данных из БД
             const { data, error } = await supabaseClient.from('characters').select('*').eq('id', charId).single();
             if (error && error.code !== 'PGRST116') {
                 document.getElementById('save-status').textContent = 'Ошибка загрузки';
@@ -255,12 +257,10 @@
 
             const charData = data || {};
             
-            // Заполняем имя (если в базе есть, иначе локальное)
             const nameInput = document.getElementById('input-name');
             nameInput.value = charData.name || char.name;
             nameInput.addEventListener('input', markUnsaved);
 
-            // Заполняем остальные поля
             paramsList.forEach(param => {
                 const textarea = document.getElementById(`input-${param.key}`);
                 if (textarea) {
@@ -290,7 +290,6 @@
                 .channel('char-changes-' + charId)
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters', filter: `id=eq.${charId}` }, (payload) => {
                     if (currentCharId === charId && !hasUnsavedChanges) {
-                        // Если кто-то изменил данные, а мы ничего не трогали — обновляем
                         if (document.activeElement !== document.getElementById('input-name')) {
                             document.getElementById('input-name').value = payload.new.name || '';
                         }
@@ -304,7 +303,6 @@
                 }).subscribe();
         }
 
-        // --- СОХРАНЕНИЕ ---
         async function saveCharacterData() {
             if (!currentCharId) return;
             const saveBtn = document.getElementById('save-btn');
@@ -324,7 +322,6 @@
 
             let finalImgUrl = currentImgUrl;
 
-            // 1. Если выбрана новая картинка — загружаем
             const fileInput = document.getElementById('edit-char-image');
             if (fileInput && fileInput.files.length > 0) {
                 const file = fileInput.files[0];
@@ -346,7 +343,6 @@
                 finalImgUrl = urlData.publicUrl;
             }
 
-            // 2. Собираем текст
             const updateData = { 
                 id: currentCharId, 
                 name: newName,
@@ -357,7 +353,6 @@
                 if (textarea) updateData[param.key] = textarea.value;
             });
 
-            // 3. Отправляем в БД
             const { error } = await supabaseClient.from('characters').upsert(updateData, { onConflict: 'id' });
 
             if (error) {
@@ -371,7 +366,6 @@
                 hasUnsavedChanges = false;
                 saveBtn.disabled = true;
                 
-                // Обновляем имя и картинку в локальном массиве и на главной
                 const char = allCharacters.find(c => c.id === currentCharId);
                 if (char) {
                     char.img = finalImgUrl;
@@ -381,6 +375,41 @@
 
                 setTimeout(() => { if (!hasUnsavedChanges) statusMsg.textContent = ''; }, 3000);
                 saveBtn.textContent = 'Сохранить анкету';
+            }
+        }
+
+        // --- УДАЛЕНИЕ С ПАРОЛЕМ ---
+        async function deleteCharacter() {
+            if (!currentCharId) return;
+            
+            if (!confirm('ВНИМАНИЕ! Вы собираетесь удалить этого персонажа навсегда. Продолжить?')) {
+                return;
+            }
+
+            const passwordInput = prompt('Для подтверждения удаления введите пароль:');
+            
+            // Проверка пароля
+            if (passwordInput !== DELETE_PASSWORD) {
+                alert('Неверный пароль! Удаление отменено.');
+                return;
+            }
+
+            const statusMsg = document.getElementById('save-status');
+            statusMsg.textContent = 'Удаление...';
+            statusMsg.style.color = '#b9bbbe';
+            document.getElementById('delete-btn').disabled = true;
+
+            const { error } = await supabaseClient.from('characters').delete().eq('id', currentCharId);
+
+            if (error) {
+                statusMsg.textContent = 'Ошибка удаления: ' + error.message;
+                statusMsg.style.color = '#f04747';
+                document.getElementById('delete-btn').disabled = false;
+            } else {
+                allCharacters = allCharacters.filter(c => c.id !== currentCharId);
+                renderCards();
+                closeModal();
+                alert('Персонаж успешно удален.');
             }
         }
 
